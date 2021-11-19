@@ -1,0 +1,6 @@
+include ':app'
+rootProject.name = "HelloAirSim"
+
+def opencvsdk='C:\\Users\\Ase\\Desktop\\Universita\\ProgettoHCI\\Librerie\\opencv-4.5.3-android-sdk'
+include ':opencv'
+project(':opencv').projectDir = new File(opencvsdk + '\\sdk')
