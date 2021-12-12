@@ -10,6 +10,6 @@ using namespace std;
 
 extern "C" {
     JNIEXPORT jboolean JNICALL Java_com_pervasive_helloairsim_MainActivity_CarConnect(JNIEnv *env, jobject);
-    JNIEXPORT void JNICALL Java_com_pervasive_helloairsim_MainActivity_CarForward(JNIEnv *env, jobject);
     JNIEXPORT void JNICALL Java_com_pervasive_helloairsim_MainActivity_GetImage(JNIEnv *env, jobject, jlong addrImg);
+    JNIEXPORT void JNICALL Java_com_pervasive_helloairsim_MainActivity_CarControl(JNIEnv *env, jobject, float angle, float force);
 }

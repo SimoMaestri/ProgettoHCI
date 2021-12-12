@@ -36,13 +36,13 @@ JNIEXPORT jboolean JNICALL Java_com_pervasive_helloairsim_MainActivity_CarConnec
     return isEnabled;
 }
 
-JNIEXPORT void JNICALL Java_com_pervasive_helloairsim_MainActivity_CarForward(JNIEnv *env, jobject)
+JNIEXPORT void JNICALL Java_com_pervasive_helloairsim_MainActivity_CarControl(JNIEnv *env, jobject, float angle, float force)
 {
-    if (!m_client)
+    if(!m_client)
         return;
     CarApiBase::CarControls controls;
-    controls.throttle = 0.5f;
-    controls.steering = 0.0f;
+    controls.throttle = force;
+    controls.steering =angle;
     m_client->setCarControls(controls);
 }
 
@@ -58,7 +58,6 @@ JNIEXPORT void JNICALL Java_com_pervasive_helloairsim_MainActivity_GetImage(JNIE
     std::vector<ImageRequest> request = { ImageRequest("0", ImageType::Scene, false)};
 
     const std::vector<ImageResponse>& response = m_client->simGetImages(request);
-
 
     assert(response.size() > 0);
     if(response.size() > 0) {

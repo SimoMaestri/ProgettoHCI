@@ -23,7 +23,8 @@ using namespace rpc::detail;
 
 namespace rpc {
 
-static constexpr uint32_t default_buffer_size = rpc::constants::DEFAULT_BUFFER_SIZE;
+static constexpr uint32_t default_buffer_size =
+    rpc::constants::DEFAULT_BUFFER_SIZE;
 
 struct client::impl {
     impl(client *parent, std::string const &addr, uint16_t port)
@@ -82,7 +83,6 @@ struct client::impl {
                         auto r = response(std::move(result));
                         auto id = r.get_id();
                         auto &current_call = ongoing_calls_[id];
-
                         try {
                             if (r.get_error()) {
                                 throw rpc_error("rpc::rpc_error during call",
@@ -134,17 +134,11 @@ struct client::impl {
         writer_->write(std::move(item));
     }
 
-    nonstd::optional<int64_t> get_timeout() {
-        return timeout_;
-    }
+    nonstd::optional<int64_t> get_timeout() { return timeout_; }
 
-    void set_timeout(int64_t value) {
-        timeout_ = value;
-    }
+    void set_timeout(int64_t value) { timeout_ = value; }
 
-    void clear_timeout() {
-        timeout_ = nonstd::nullopt;
-    }
+    void clear_timeout() { timeout_ = nonstd::nullopt; }
 
     using call_t =
         std::pair<std::string, std::promise<RPCLIB_MSGPACK::object_handle>>;
@@ -203,9 +197,7 @@ void client::wait_conn() {
     }
 }
 
-int client::get_next_call_idx() {
-    return ++(pimpl->call_idx_);
-}
+int client::get_next_call_idx() { return ++(pimpl->call_idx_); }
 
 void client::post(std::shared_ptr<RPCLIB_MSGPACK::sbuffer> buffer, int idx,
                   std::string const &func_name,
@@ -232,13 +224,9 @@ nonstd::optional<int64_t> client::get_timeout() const {
     return pimpl->get_timeout();
 }
 
-void client::set_timeout(int64_t value) {
-    pimpl->set_timeout(value);
-}
+void client::set_timeout(int64_t value) { pimpl->set_timeout(value); }
 
-void client::clear_timeout() {
-    pimpl->clear_timeout();
-}
+void client::clear_timeout() { pimpl->clear_timeout(); }
 
 void client::wait_all_responses() {
     for (auto &c : pimpl->ongoing_calls_) {
@@ -246,7 +234,7 @@ void client::wait_all_responses() {
     }
 }
 
-RPCLIB_NORETURN void client::throw_timeout(std::string const& func_name) {
+RPCLIB_NORETURN void client::throw_timeout(std::string const &func_name) {
     throw rpc::timeout(
         RPCLIB_FMT::format("Timeout of {}ms while calling RPC function '{}'",
                            *get_timeout(), func_name));
@@ -257,4 +245,4 @@ client::~client() {
     pimpl->io_thread_.join();
 }
 
-}
+} // namespace rpc

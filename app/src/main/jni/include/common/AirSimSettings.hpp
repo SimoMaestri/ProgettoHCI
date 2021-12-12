@@ -50,10 +50,16 @@ namespace airlib
             bool visible;
             std::string camera_name;
             std::string vehicle_name;
+            bool external;
 
-            SubwindowSetting(int window_index_val = 0, ImageType image_type_val = ImageType::Scene,
-                             bool visible_val = false, const std::string& camera_name_val = "", const std::string& vehicle_name_val = "")
-                : window_index(window_index_val), image_type(image_type_val), visible(visible_val), camera_name(camera_name_val), vehicle_name(vehicle_name_val)
+            SubwindowSetting(int window_index_val = 0, ImageType image_type_val = ImageType::Scene, bool visible_val = false,
+                             const std::string& camera_name_val = "", const std::string& vehicle_name_val = "", bool external_val = false)
+                : window_index(window_index_val)
+                , image_type(image_type_val)
+                , visible(visible_val)
+                , camera_name(camera_name_val)
+                , vehicle_name(vehicle_name_val)
+                , external(external_val)
             {
             }
         };
@@ -257,6 +263,15 @@ namespace airlib
             std::map<std::string, std::shared_ptr<SensorSetting>> sensors;
 
             RCSettings rc;
+
+            VehicleSetting()
+            {
+            }
+
+            VehicleSetting(const std::string& vehicle_name_val, const std::string& vehicle_type_val)
+                : vehicle_name(vehicle_name_val), vehicle_type(vehicle_type_val)
+            {
+            }
         };
 
         struct MavLinkConnectionInfo
@@ -374,6 +389,7 @@ namespace airlib
         float clock_speed = 1.0f;
         bool engine_sound = false;
         bool log_messages_visible = true;
+        bool show_los_debug_lines_ = false;
         HomeGeoPoint origin_geopoint{ GeoPoint(47.641468, -122.140165, 122) }; //The geo-coordinate assigned to Unreal coordinate 0,0,0
         std::map<std::string, PawnPath> pawn_paths; //path for pawn blueprint
         std::map<std::string, std::unique_ptr<VehicleSetting>> vehicles;
@@ -383,6 +399,7 @@ namespace airlib
         std::string speed_unit_label = "m\\s";
         std::map<std::string, std::shared_ptr<SensorSetting>> sensor_defaults;
         Vector3r wind = Vector3r::Zero();
+        std::map<std::string, CameraSetting> external_cameras;
 
         std::string settings_text_ = "";
 
@@ -418,6 +435,7 @@ namespace airlib
             loadOtherSettings(settings_json);
             loadDefaultSensorSettings(simmode_name, settings_json, sensor_defaults);
             loadVehicleSettings(simmode_name, settings_json, vehicles, sensor_defaults);
+            loadExternalCameraSettings(settings_json, external_cameras);
 
             //this should be done last because it depends on vehicles (and/or their type) we have
             loadRecordingSetting(settings_json);
@@ -450,12 +468,12 @@ namespace airlib
         // This is for the case when a new vehicle is made on the fly, at runtime
         void addVehicleSetting(const std::string& vehicle_name, const std::string& vehicle_type, const Pose& pose, const std::string& pawn_path = "")
         {
-            auto vehicle_setting = std::unique_ptr<VehicleSetting>(new VehicleSetting());
-
-            vehicle_setting->vehicle_name = vehicle_name;
-            vehicle_setting->vehicle_type = vehicle_type;
+            // No Mavlink-type vehicles currently
+            auto vehicle_setting = std::unique_ptr<VehicleSetting>(new VehicleSetting(vehicle_name, vehicle_type));
             vehicle_setting->position = pose.position;
             vehicle_setting->pawn_path = pawn_path;
+
+            vehicle_setting->sensors = sensor_defaults;
 
             VectorMath::toEulerianAngle(pose.orientation, vehicle_setting->rotation.pitch, vehicle_setting->rotation.roll, vehicle_setting->rotation.yaw);
 
@@ -819,7 +837,8 @@ namespace airlib
             return vehicle_setting;
         }
 
-        static void initializeVehicleSettings(const std::string& simmode_name, std::map<std::string, std::unique_ptr<VehicleSetting>>& vehicles)
+        static void createDefaultVehicle(const std::string& simmode_name, std::map<std::string, std::unique_ptr<VehicleSetting>>& vehicles,
+                                         const std::map<std::string, std::shared_ptr<SensorSetting>>& sensor_defaults)
         {
             vehicles.clear();
 
@@ -827,26 +846,24 @@ namespace airlib
             //to sync code in createVehicleSetting() as well.
             if (simmode_name == kSimModeTypeMultirotor) {
                 // create simple flight as default multirotor
-                auto simple_flight_setting = std::unique_ptr<VehicleSetting>(new VehicleSetting());
-                simple_flight_setting->vehicle_name = "SimpleFlight";
-                simple_flight_setting->vehicle_type = kVehicleTypeSimpleFlight;
+                auto simple_flight_setting = std::unique_ptr<VehicleSetting>(new VehicleSetting("SimpleFlight",
+                                                                                                kVehicleTypeSimpleFlight));
                 // TODO: we should be selecting remote if available else keyboard
                 // currently keyboard is not supported so use rc as default
                 simple_flight_setting->rc.remote_control_id = 0;
+                simple_flight_setting->sensors = sensor_defaults;
                 vehicles[simple_flight_setting->vehicle_name] = std::move(simple_flight_setting);
             }
             else if (simmode_name == kSimModeTypeCar) {
                 // create PhysX as default car vehicle
-                auto physx_car_setting = std::unique_ptr<VehicleSetting>(new VehicleSetting());
-                physx_car_setting->vehicle_name = "PhysXCar";
-                physx_car_setting->vehicle_type = kVehicleTypePhysXCar;
+                auto physx_car_setting = std::unique_ptr<VehicleSetting>(new VehicleSetting("PhysXCar", kVehicleTypePhysXCar));
+                physx_car_setting->sensors = sensor_defaults;
                 vehicles[physx_car_setting->vehicle_name] = std::move(physx_car_setting);
             }
             else if (simmode_name == kSimModeTypeComputerVision) {
                 // create default computer vision vehicle
-                auto cv_setting = std::unique_ptr<VehicleSetting>(new VehicleSetting());
-                cv_setting->vehicle_name = "ComputerVision";
-                cv_setting->vehicle_type = kVehicleTypeComputerVision;
+                auto cv_setting = std::unique_ptr<VehicleSetting>(new VehicleSetting("ComputerVision", kVehicleTypeComputerVision));
+                cv_setting->sensors = sensor_defaults;
                 vehicles[cv_setting->vehicle_name] = std::move(cv_setting);
             }
             else {
@@ -860,7 +877,7 @@ namespace airlib
                                         std::map<std::string, std::unique_ptr<VehicleSetting>>& vehicles,
                                         std::map<std::string, std::shared_ptr<SensorSetting>>& sensor_defaults)
         {
-            initializeVehicleSettings(simmode_name, vehicles);
+            createDefaultVehicle(simmode_name, vehicles, sensor_defaults);
 
             msr::airlib::Settings vehicles_child;
             if (settings_json.getChild("Vehicles", vehicles_child)) {
@@ -937,7 +954,7 @@ namespace airlib
                     //TODO: below exception doesn't actually get raised right now because of issue in Unreal Engine?
                     throw std::invalid_argument(std::string("SegmentationSetting init_method has invalid value in settings_json ") + init_method);
 
-                segmentation_setting.override_existing = json_parent.getBool("OverrideExisting", false);
+                segmentation_setting.override_existing = json_parent.getBool("OverrideExisting", true);
 
                 std::string mesh_naming_method = Utils::toLower(json_parent.getString("MeshNamingMethod", ""));
                 if (mesh_naming_method == "" || mesh_naming_method == "ownername")
@@ -1079,6 +1096,7 @@ namespace airlib
                         subwindow_setting.visible = json_settings_child.getBool("Visible", false);
                         subwindow_setting.camera_name = getCameraName(json_settings_child);
                         subwindow_setting.vehicle_name = json_settings_child.getString("VehicleName", "");
+                        subwindow_setting.external = json_settings_child.getBool("External", false);
                     }
                 }
             }
@@ -1087,9 +1105,9 @@ namespace airlib
         static void initializeSubwindowSettings(std::vector<SubwindowSetting>& subwindow_settings)
         {
             subwindow_settings.clear();
-            subwindow_settings.push_back(SubwindowSetting(0, ImageType::DepthVis, false, "", "")); //depth
-            subwindow_settings.push_back(SubwindowSetting(1, ImageType::Segmentation, false, "", "")); //seg
-            subwindow_settings.push_back(SubwindowSetting(2, ImageType::Scene, false, "", "")); //vis
+            subwindow_settings.push_back(SubwindowSetting(0, ImageType::DepthVis, false, "", "", false)); //depth
+            subwindow_settings.push_back(SubwindowSetting(1, ImageType::Segmentation, false, "", "", false)); //seg
+            subwindow_settings.push_back(SubwindowSetting(2, ImageType::Scene, false, "", "", false)); //vis
         }
 
         void loadOtherSettings(const Settings& settings_json)
@@ -1105,6 +1123,7 @@ namespace airlib
             speed_unit_factor = settings_json.getFloat("SpeedUnitFactor", 1.0f);
             speed_unit_label = settings_json.getString("SpeedUnitLabel", "m\\s");
             log_messages_visible = settings_json.getBool("LogMessagesVisible", true);
+            show_los_debug_lines_ = settings_json.getBool("ShowLosDebugLines", false);
 
             { //load origin geopoint
                 Settings origin_geopoint_json;
@@ -1153,8 +1172,8 @@ namespace airlib
 
             Settings child_json;
             if (settings_json.getChild("CameraDirector", child_json)) {
-                camera_director.position = createVectorSetting(settings_json, camera_director.position);
-                camera_director.rotation = createRotationSetting(settings_json, camera_director.rotation);
+                camera_director.position = createVectorSetting(child_json, camera_director.position);
+                camera_director.rotation = createRotationSetting(child_json, camera_director.rotation);
                 camera_director.follow_distance = child_json.getFloat("FollowDistance", camera_director.follow_distance);
             }
 
@@ -1256,11 +1275,8 @@ namespace airlib
                                        std::map<std::string, std::shared_ptr<SensorSetting>>& sensor_defaults)
 
         {
-            // start with defaults.
-            for (auto ptr = sensor_defaults.begin(); ptr != sensor_defaults.end(); ptr++) {
-                auto key = ptr->first;
-                sensors[key] = sensor_defaults[key];
-            }
+            // NOTE: Increase type if number of sensors goes above 8
+            uint8_t present_sensors_bitmask = 0;
 
             msr::airlib::Settings sensors_child;
             if (settings_json.getChild(collectionName, sensors_child)) {
@@ -1276,7 +1292,18 @@ namespace airlib
 
                     sensors[key] = createSensorSetting(sensor_type, key, enabled);
                     initializeSensorSetting(sensors[key].get(), child);
+
+                    // Mark sensor types already added
+                    present_sensors_bitmask |= 1U << Utils::toNumeric(sensor_type);
                 }
+            }
+
+            // Only add default sensors which are not present
+            for (const auto& p : sensor_defaults) {
+                auto type = Utils::toNumeric(p.second->sensor_type);
+
+                if ((present_sensors_bitmask & (1U << type)) == 0)
+                    sensors[p.first] = p.second;
             }
         }
 
@@ -1309,8 +1336,25 @@ namespace airlib
             else
                 createDefaultSensorSettings(simmode_name, sensors);
         }
-    };
 
+        static void loadExternalCameraSettings(const Settings& settings_json, std::map<std::string, CameraSetting>& external_cameras)
+        {
+            external_cameras.clear();
+
+            Settings json_parent;
+            if (settings_json.getChild("ExternalCameras", json_parent)) {
+                std::vector<std::string> keys;
+                json_parent.getChildNames(keys);
+
+                for (const auto& key : keys) {
+                    Settings child;
+                    json_parent.getChild(key, child);
+                    external_cameras[key] = createCameraSetting(child);
+                }
+            }
+        }
+    };
 }
 } //namespace
+
 #endif
