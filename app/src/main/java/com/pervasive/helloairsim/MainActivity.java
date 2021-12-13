@@ -28,7 +28,6 @@ public class MainActivity extends AppCompatActivity {
     public native void GetImage(long imgAddr);
     public native void CarControl(float angle, float force);
 
-
     private ImageView cameraImage;
     private FrameProcessing frameProc;
     public boolean connection = false;
@@ -62,8 +61,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-
-
     private void GetFrame(){
         final Handler handler = new Handler();
         handler.postDelayed(new Runnable() {
@@ -71,7 +68,7 @@ public class MainActivity extends AppCompatActivity {
                 if (connection) {
                     frameProc.getFrontImage();
                     if (cameraImage != null) {
-                        cameraImage.setImageBitmap(frameProc.LineDetection());
+                        cameraImage.setImageBitmap(frameProc.LaneDetection());
                     }
                     handler.postDelayed(this, 1);
                 }
